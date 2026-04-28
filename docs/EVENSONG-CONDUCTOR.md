@@ -15,7 +15,17 @@ It keeps the upstream Elixir runner as a reference implementation while adding a
 
 ## Local Database
 
-Start Supabase locally:
+The easiest first run is:
+
+```bash
+make first-launch
+```
+
+That command checks for a Docker daemon, starts Colima when available, starts the Supabase local stack, applies migrations, runs Rust tests, and writes one redacted ledger health event. It skips Supabase's optional analytics/log collector containers because the conductor ledger does not need them and Colima can reject the Docker socket mount those containers use.
+
+The migration enables RLS on all conductor tables and revokes direct `anon` / `authenticated` access. The current CLI path uses the local Postgres connection for owner-side ledger writes; future public or app-facing APIs should add explicit policies instead of inheriting broad default access.
+
+If you want to run the steps manually, start Supabase locally:
 
 ```bash
 supabase start
@@ -32,6 +42,12 @@ Run the ledger smoke check:
 
 ```bash
 cargo run -p conductor-core -- ledger-health
+```
+
+Supabase Studio is available at:
+
+```text
+http://127.0.0.1:54323
 ```
 
 ## Boundary

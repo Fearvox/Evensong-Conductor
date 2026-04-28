@@ -16,6 +16,12 @@ This fork is becoming Evensong-Conductor: an agent operations layer for Linear/G
 
 The upstream Symphony spec and Elixir reference runner remain intact. Evensong-specific design and implementation notes live in [`docs/EVENSONG-CONDUCTOR.md`](docs/EVENSONG-CONDUCTOR.md).
 
+For the Evensong-Conductor foundation smoke test:
+
+```bash
+make first-launch
+```
+
 ## Running Symphony
 
 ### Requirements

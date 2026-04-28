@@ -145,3 +145,41 @@ create index conductor_model_usage_attempt_recorded_idx
 
 create index conductor_model_usage_provider_model_recorded_idx
   on conductor_model_usage (provider, model, recorded_at desc);
+
+alter table conductor_projects enable row level security;
+alter table conductor_work_items enable row level security;
+alter table conductor_runs enable row level security;
+alter table conductor_run_attempts enable row level security;
+alter table conductor_workers enable row level security;
+alter table conductor_worker_leases enable row level security;
+alter table conductor_events enable row level security;
+alter table conductor_artifacts enable row level security;
+alter table conductor_model_usage enable row level security;
+
+revoke all on table
+  conductor_projects,
+  conductor_work_items,
+  conductor_runs,
+  conductor_run_attempts,
+  conductor_workers,
+  conductor_worker_leases,
+  conductor_events,
+  conductor_artifacts,
+  conductor_model_usage
+from anon, authenticated;
+
+revoke all on sequence conductor_events_id_seq from anon, authenticated;
+
+grant all on table
+  conductor_projects,
+  conductor_work_items,
+  conductor_runs,
+  conductor_run_attempts,
+  conductor_workers,
+  conductor_worker_leases,
+  conductor_events,
+  conductor_artifacts,
+  conductor_model_usage
+to service_role;
+
+grant usage, select on sequence conductor_events_id_seq to service_role;
