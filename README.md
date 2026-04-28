@@ -22,6 +22,14 @@ For the Evensong-Conductor foundation smoke test:
 make first-launch
 ```
 
+To open the local operator GUI after Supabase is running:
+
+```bash
+make console
+```
+
+The console is available at `http://127.0.0.1:4317` and renders redacted ledger state from the local conductor database.
+
 ## Running Symphony
 
 ### Requirements

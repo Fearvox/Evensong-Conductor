@@ -43,5 +43,6 @@ DATABASE_URL="$DATABASE_URL" cargo run -p conductor-core -- ledger-health
 echo
 echo "first launch ready"
 echo "Supabase Studio: http://127.0.0.1:54323"
+echo "Conductor UI:    http://127.0.0.1:4317  (run: make console)"
 echo "Postgres URL:    $DATABASE_URL"
 echo "Next check:      DATABASE_URL=\"$DATABASE_URL\" cargo run -p conductor-core -- ledger-health"

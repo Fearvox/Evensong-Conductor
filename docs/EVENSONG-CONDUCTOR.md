@@ -10,6 +10,7 @@ It keeps the upstream Elixir runner as a reference implementation while adding a
 - Upstream Elixir reference runner: `elixir/`
 - Evensong design spec: `docs/superpowers/specs/2026-04-28-evensong-conductor-design.md`
 - Foundation plan: `docs/superpowers/plans/2026-04-28-evensong-conductor-foundation.md`
+- Operator console v0 plan: `docs/superpowers/plans/2026-04-28-operator-console-v0.md`
 - Supabase migrations: `supabase/migrations/`
 - Rust core: `crates/conductor-core/`
 
@@ -43,6 +44,20 @@ Run the ledger smoke check:
 ```bash
 cargo run -p conductor-core -- ledger-health
 ```
+
+Start the local operator console:
+
+```bash
+make console
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4317
+```
+
+The console reads the local ledger, shows table counts, recent redacted events, and the current RLS/public-grant posture. It does not render the database URL, private prompts, API keys, or raw terminal logs.
 
 Supabase Studio is available at:
 
