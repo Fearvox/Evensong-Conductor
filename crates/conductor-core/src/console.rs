@@ -134,11 +134,16 @@ pub async fn serve(pool: PgPool, bind: SocketAddr) -> Result<()> {
 async fn index(State(state): State<AppState>) -> impl IntoResponse {
     match load_snapshot(&state.pool).await {
         Ok(snapshot) => Html(render_dashboard(&snapshot)).into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Html(render_error_page(&error.to_string())),
-        )
-            .into_response(),
+        Err(error) => {
+            eprintln!("failed to load console snapshot: {error:#}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(render_error_page(
+                    "Failed to read the local conductor ledger.",
+                )),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -153,15 +158,18 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
             }),
         )
             .into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "ok": false,
-                "error": error.to_string(),
-                "generated_at": Utc::now().to_rfc3339(),
-            })),
-        )
-            .into_response(),
+        Err(error) => {
+            eprintln!("healthz failed: {error:#}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": "internal server error",
+                    "generated_at": Utc::now().to_rfc3339(),
+                })),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -172,25 +180,38 @@ async fn favicon() -> StatusCode {
 async fn write_ledger_health(State(state): State<AppState>) -> impl IntoResponse {
     match ledger::write_health_event(&state.pool).await {
         Ok(_) => Redirect::to("/").into_response(),
-        Err(error) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Html(render_error_page(&error.to_string())),
-        )
-            .into_response(),
+        Err(error) => {
+            eprintln!("failed to write ledger health event: {error:#}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Html(render_error_page("Failed to write ledger health event.")),
+            )
+                .into_response()
+        }
     }
 }
 
 async fn load_snapshot(pool: &PgPool) -> Result<ConsoleSnapshot> {
-    let mut table_counts = Vec::with_capacity(CONDUCTOR_TABLES.len());
+    let mut count_tasks = Vec::with_capacity(CONDUCTOR_TABLES.len());
 
     for (table, label) in CONDUCTOR_TABLES {
-        let sql = format!("select count(*)::bigint as count from {table}");
-        let count = sqlx::query_scalar::<_, i64>(&sql).fetch_one(pool).await?;
-        table_counts.push(TableCount {
-            table,
-            label,
-            count,
-        });
+        let pool = pool.clone();
+        count_tasks.push(tokio::spawn(async move {
+            let sql = format!("select count(*)::bigint as count from {table}");
+            let count = sqlx::query_scalar::<_, i64>(&sql).fetch_one(&pool).await?;
+
+            Ok::<TableCount, sqlx::Error>(TableCount {
+                table,
+                label,
+                count,
+            })
+        }));
+    }
+
+    let mut table_counts = Vec::with_capacity(CONDUCTOR_TABLES.len());
+
+    for task in count_tasks {
+        table_counts.push(task.await??);
     }
 
     let recent_events = recent_events(pool).await?;
@@ -405,7 +426,7 @@ fn render_command_bar(event_count: i64, grant_status: &str) -> String {
   </a>
   <label class="command-input">
     <span>⌘</span>
-    <input aria-label="Command input" value="Ask Conductor or run command..." readonly>
+    <input aria-label="Command input" placeholder="Ask Conductor or run command..." readonly>
   </label>
   <div class="status-chips" aria-label="Console status">
     <span class="status-chip good">Local Supabase online</span>
@@ -413,7 +434,7 @@ fn render_command_bar(event_count: i64, grant_status: &str) -> String {
     <span class="status-chip{}">{}</span>
   </div>
   <form action="/api/ledger-health" method="post">
-    <button class="primary-action" type="submit">New run</button>
+    <button class="primary-action" type="submit">Write health event</button>
   </form>
 </header>"#,
         event_count,
