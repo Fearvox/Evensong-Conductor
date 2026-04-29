@@ -1,0 +1,6 @@
+/target/
+/.superpowers/
+/.env
+/.env.*
+/supabase/.branches/
+/supabase/.temp/

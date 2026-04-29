@@ -10,6 +10,26 @@ _In this [demo video](.github/media/symphony-demo.mp4), Symphony monitors a Line
 > [!WARNING]
 > Symphony is a low-key engineering preview for testing in trusted environments.
 
+## Evensong-Conductor Fork
+
+This fork is becoming Evensong-Conductor: an agent operations layer for Linear/GitHub work, Codex/Hermes/MiMo worker sessions, GSD/Superpowers policy checks, and Research Vault-backed memory.
+
+The upstream Symphony spec and Elixir reference runner remain intact. Evensong-specific design and implementation notes live in [`docs/EVENSONG-CONDUCTOR.md`](docs/EVENSONG-CONDUCTOR.md).
+
+For the Evensong-Conductor foundation smoke test:
+
+```bash
+make first-launch
+```
+
+To open the local operator GUI after Supabase is running:
+
+```bash
+make console
+```
+
+The console is available at `http://127.0.0.1:4317` and renders redacted ledger state from the local conductor database.
+
 ## Running Symphony
 
 ### Requirements
