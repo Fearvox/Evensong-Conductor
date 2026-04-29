@@ -617,6 +617,7 @@ fn render_inspector(
       <button type="submit">Write health event</button>
     </form>
   </section>
+  {}
   <section class="inspector-card">
     <div class="card-head">
       <span>Memory snapshot</span>
@@ -670,6 +671,7 @@ fn render_inspector(
         escape_html(grant_status),
         escape_html(&format_generated_time(&snapshot.generated_at)),
         render_recent_event_summary(&snapshot.recent_events),
+        render_hermes_status(&snapshot.recent_events),
         escape_html(&memory_snapshot),
         artifact_items().len(),
         render_artifacts(),
@@ -677,6 +679,76 @@ fn render_inspector(
         snapshot.security.conductor_tables,
         render_table_counts(&snapshot.table_counts)
     )
+}
+
+fn render_hermes_status(events: &[EventRow]) -> String {
+    let Some(event) = events
+        .iter()
+        .find(|event| event.event_type == "hermes.health")
+    else {
+        return r#"<section class="inspector-card hermes-card">
+  <div class="card-head">
+    <span>Remote Hermes</span>
+    <strong>unknown</strong>
+  </div>
+  <p>No remote supervisor event has been written yet.</p>
+</section>"#
+            .to_string();
+    };
+
+    let payload = &event.payload_redacted;
+    let status = payload
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    let host_label = payload
+        .get("host_label")
+        .and_then(Value::as_str)
+        .unwrap_or("remote");
+    let tmux_target = payload
+        .get("tmux_target")
+        .and_then(Value::as_str)
+        .unwrap_or("not configured");
+    let smoke_label = match payload.get("smoke_ok").and_then(Value::as_bool) {
+        Some(true) => "smoke ok",
+        Some(false) => "smoke failed",
+        None => "read-only",
+    };
+    let mem_label = payload
+        .get("mem_available_kb")
+        .and_then(Value::as_i64)
+        .map(format_kb_as_mb)
+        .unwrap_or_else(|| "unknown memory".to_string());
+
+    format!(
+        r#"<section class="inspector-card hermes-card">
+  <div class="card-head">
+    <span>Remote Hermes</span>
+    <strong>{}</strong>
+  </div>
+  <div class="hermes-status-grid">
+    <div><span>Host</span><b>{}</b></div>
+    <div><span>Pane</span><b>{}</b></div>
+    <div><span>Probe</span><b>{}</b></div>
+    <div><span>Memory</span><b>{}</b></div>
+  </div>
+  <small>{}</small>
+</section>"#,
+        escape_html(status),
+        escape_html(host_label),
+        escape_html(tmux_target),
+        escape_html(smoke_label),
+        escape_html(&mem_label),
+        escape_html(&format_console_time(&event.created_at))
+    )
+}
+
+fn format_kb_as_mb(value: i64) -> String {
+    if value <= 0 {
+        return "unknown memory".to_string();
+    }
+
+    format!("{} MiB free", value / 1024)
 }
 
 fn render_recent_event_summary(events: &[EventRow]) -> String {
@@ -1428,6 +1500,37 @@ code {
   font-size: 12px;
 }
 
+.hermes-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.hermes-status-grid div {
+  display: grid;
+  gap: 7px;
+  min-height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(30, 106, 79, 0.06);
+}
+
+.hermes-status-grid span,
+.hermes-card small {
+  color: var(--muted);
+  font: 640 11px/1.25 "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.hermes-status-grid b {
+  color: var(--green-2);
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 pre {
   max-height: 180px;
   overflow: auto;
@@ -1954,5 +2057,44 @@ mod tests {
         assert!(html.contains("Hermes"));
         assert!(html.contains("Context window / budget"));
         assert!(html.contains("No public grants"));
+    }
+
+    #[test]
+    fn renders_remote_hermes_status_from_latest_health_event() {
+        let snapshot = ConsoleSnapshot {
+            generated_at: "2026-04-28T12:00:00Z".to_string(),
+            table_counts: vec![TableCount {
+                table: "conductor_events",
+                label: "Events",
+                count: 1,
+            }],
+            recent_events: vec![EventRow {
+                id: 8,
+                event_type: "hermes.health".to_string(),
+                severity: "info".to_string(),
+                message: "remote hermes supervision smoke ok".to_string(),
+                payload_redacted: serde_json::json!({
+                    "status": "online",
+                    "host_label": "hermes-nyc1",
+                    "tmux_target": "hermes-evo-health-20260426:mimo-max",
+                    "smoke_sent": true,
+                    "smoke_ok": true,
+                    "mem_available_kb": 829440
+                }),
+                created_at: Utc::now(),
+            }],
+            security: SecurityPosture {
+                conductor_tables: 9,
+                rls_disabled: 0,
+                public_role_grants: 0,
+            },
+        };
+
+        let html = render_dashboard(&snapshot);
+
+        assert!(html.contains("Remote Hermes"));
+        assert!(html.contains("hermes-nyc1"));
+        assert!(html.contains("mimo-max"));
+        assert!(html.contains("smoke ok"));
     }
 }

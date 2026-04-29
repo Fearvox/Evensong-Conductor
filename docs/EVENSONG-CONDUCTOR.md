@@ -65,6 +65,31 @@ Supabase Studio is available at:
 http://127.0.0.1:54323
 ```
 
+## Remote Hermes Supervision
+
+The first real worker adapter is a narrow Hermes supervisor probe. It checks a remote SSH target, validates a tmux pane, captures only enough state to determine health, and can optionally send a one-line smoke ping.
+
+Set the target at runtime instead of committing private host details:
+
+```bash
+export HERMES_SSH_TARGET="user@host"
+export HERMES_TMUX_TARGET="session:window"
+```
+
+Read-only probe:
+
+```bash
+make hermes-health
+```
+
+Explicit smoke probe, with a redacted `hermes.health` event written into the local ledger:
+
+```bash
+make hermes-smoke
+```
+
+The ledger event stores redacted operational facts such as status, remote host label, tmux target, memory availability, and smoke result. It does not store SSH target strings, raw terminal capture, private prompts, API keys, or local paths.
+
 ## Boundary
 
 The ledger stores redacted operational facts, not secrets. Keep API keys, private endpoints, local absolute paths, and raw private terminal logs out of committed files and out of ledger payloads.
