@@ -1,4 +1,4 @@
-use conductor_core::hermes::{HermesProbeStatus, parse_probe_output};
+use conductor_core::hermes::{HermesProbeConfig, HermesProbeStatus, parse_probe_output};
 
 #[test]
 fn parses_online_read_only_probe_output() {
@@ -72,4 +72,48 @@ CAPTURE_END
     assert!(payload_text.contains("hermes-evo-health-20260426:mimo-max"));
     assert!(!payload_text.contains("Health ping only."));
     assert!(!payload_text.contains("HERMES_SUPERVISION_SMOKE_OK"));
+}
+
+#[test]
+fn ignores_smoke_expected_token_unless_it_is_a_captured_reply_line() {
+    let output = r#"
+HOST=hermes-nyc1
+TMUX_SESSIONS=7
+TMUX_TARGET_EXISTS=yes
+HERMES_PROCS=5
+CAPTURE_BEGIN
+Health ping only. Do not run tools. Reply with exactly: HERMES_SUPERVISION_SMOKE_OK
+CAPTURE_END
+"#;
+
+    let report = parse_probe_output(
+        output,
+        "hermes-evo-health-20260426:mimo-max",
+        Some("HERMES_SUPERVISION_SMOKE_OK"),
+    )
+    .expect("probe output should parse");
+
+    assert!(report.smoke_sent);
+    assert_eq!(report.smoke_ok, Some(false));
+}
+
+#[test]
+fn uses_fail_closed_ssh_host_key_checking_by_default() {
+    temp_env::with_var(
+        "HERMES_SSH_STRICT_HOST_KEY_CHECKING",
+        Option::<&str>::None,
+        || {
+            let config = HermesProbeConfig::from_inputs(
+                Some("user@host".to_string()),
+                Some("session:window".to_string()),
+                40,
+                false,
+                None,
+                None,
+            )
+            .expect("config should load");
+
+            assert_eq!(config.strict_host_key_checking, "yes");
+        },
+    );
 }

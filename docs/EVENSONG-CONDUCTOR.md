@@ -76,6 +76,14 @@ export HERMES_SSH_TARGET="user@host"
 export HERMES_TMUX_TARGET="session:window"
 ```
 
+SSH host key checking fails closed by default with `StrictHostKeyChecking=yes`. Pre-provision the remote host key in `known_hosts` before probing. For disposable operator-only targets, you can opt into first-seen trust with:
+
+```bash
+export HERMES_SSH_STRICT_HOST_KEY_CHECKING="accept-new"
+```
+
+That convenience trades away first-connect MITM protection, so keep the default for stable hosts.
+
 Read-only probe:
 
 ```bash

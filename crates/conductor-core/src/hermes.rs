@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 
 const DEFAULT_CAPTURE_LINES: usize = 40;
 const DEFAULT_SSH_CONNECT_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_SSH_STRICT_HOST_KEY_CHECKING: &str = "yes";
+const SSH_STRICT_HOST_KEY_CHECKING_ENV: &str = "HERMES_SSH_STRICT_HOST_KEY_CHECKING";
 const DEFAULT_SMOKE_MESSAGE: &str =
     "Health ping only. Do not run tools. Reply with exactly: HERMES_SUPERVISION_SMOKE_OK";
 const DEFAULT_SMOKE_EXPECTED: &str = "HERMES_SUPERVISION_SMOKE_OK";
@@ -31,6 +33,7 @@ pub struct HermesProbeConfig {
     pub smoke_message: String,
     pub smoke_expected: String,
     pub connect_timeout_secs: u64,
+    pub strict_host_key_checking: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -70,6 +73,10 @@ impl HermesProbeConfig {
         if tmux_target.trim().is_empty() {
             bail!("Hermes tmux target cannot be empty");
         }
+        let strict_host_key_checking = normalize_strict_host_key_checking(
+            std::env::var(SSH_STRICT_HOST_KEY_CHECKING_ENV)
+                .unwrap_or_else(|_| DEFAULT_SSH_STRICT_HOST_KEY_CHECKING.to_string()),
+        )?;
 
         Ok(Self {
             ssh_target,
@@ -83,6 +90,7 @@ impl HermesProbeConfig {
             smoke_message: smoke_message.unwrap_or_else(|| DEFAULT_SMOKE_MESSAGE.to_string()),
             smoke_expected: smoke_expected.unwrap_or_else(|| DEFAULT_SMOKE_EXPECTED.to_string()),
             connect_timeout_secs: DEFAULT_SSH_CONNECT_TIMEOUT_SECS,
+            strict_host_key_checking,
         })
     }
 }
@@ -128,14 +136,17 @@ impl HermesProbeReport {
 }
 
 pub fn probe(config: &HermesProbeConfig) -> Result<HermesProbeReport> {
+    let strict_host_key_checking =
+        format!("StrictHostKeyChecking={}", config.strict_host_key_checking);
+    let connect_timeout = format!("ConnectTimeout={}", config.connect_timeout_secs);
     let mut child = Command::new("ssh")
         .args([
             "-o",
             "BatchMode=yes",
             "-o",
-            "StrictHostKeyChecking=accept-new",
+            &strict_host_key_checking,
             "-o",
-            &format!("ConnectTimeout={}", config.connect_timeout_secs),
+            &connect_timeout,
             &config.ssh_target,
             "sh",
             "-s",
@@ -198,7 +209,8 @@ pub fn parse_probe_output(
     let tmux_target_exists = fields
         .get("TMUX_TARGET_EXISTS")
         .is_some_and(|value| value == "yes");
-    let smoke_ok = smoke_expected.map(|expected| output.contains(expected));
+    let smoke_ok =
+        smoke_expected.map(|expected| capture_contains_exact_line(output, expected.trim()));
 
     let status = if tmux_target_exists {
         HermesProbeStatus::Online
@@ -238,6 +250,41 @@ fn parse_key_values(output: &str) -> HashMap<String, String> {
 
 fn parse_i64(value: Option<&String>) -> Option<i64> {
     value.and_then(|value| value.parse().ok())
+}
+
+fn capture_contains_exact_line(output: &str, expected: &str) -> bool {
+    let mut in_capture = false;
+
+    for line in output.lines() {
+        match line.trim() {
+            "CAPTURE_BEGIN" => {
+                in_capture = true;
+                continue;
+            }
+            "CAPTURE_END" => {
+                in_capture = false;
+                continue;
+            }
+            _ => {}
+        }
+
+        if in_capture && line.trim() == expected {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn normalize_strict_host_key_checking(value: String) -> Result<String> {
+    let value = value.trim();
+
+    match value {
+        "yes" | "accept-new" => Ok(value.to_string()),
+        _ => bail!(
+            "{SSH_STRICT_HOST_KEY_CHECKING_ENV} must be 'yes' or 'accept-new' for Hermes probes"
+        ),
+    }
 }
 
 fn remote_probe_script() -> &'static str {
