@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::json;
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
 
-use crate::config::ConductorConfig;
+use crate::{config::ConductorConfig, hermes::HermesProbeReport};
 
 pub async fn connect(config: &ConductorConfig) -> Result<PgPool> {
     let pool = PgPoolOptions::new()
@@ -25,6 +25,24 @@ pub async fn write_health_event(pool: &PgPool) -> Result<i64> {
     .bind("info")
     .bind("conductor ledger health check")
     .bind(json!({"source": "conductor-core"}))
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.get("id"))
+}
+
+pub async fn write_hermes_health_event(pool: &PgPool, report: &HermesProbeReport) -> Result<i64> {
+    let row = sqlx::query(
+        r#"
+        insert into conductor_events (event_type, severity, message, payload_redacted)
+        values ($1, $2, $3, $4)
+        returning id
+        "#,
+    )
+    .bind("hermes.health")
+    .bind(report.severity())
+    .bind(report.message())
+    .bind(report.to_redacted_payload())
     .fetch_one(pool)
     .await?;
 

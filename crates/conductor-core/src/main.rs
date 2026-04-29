@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
-use conductor_core::{config::ConductorConfig, console, ledger};
+use conductor_core::{config::ConductorConfig, console, hermes, ledger};
 use std::net::SocketAddr;
 
 #[derive(Debug, Parser)]
@@ -14,6 +14,22 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     LedgerHealth,
+    HermesHealth {
+        #[arg(long)]
+        ssh_target: Option<String>,
+        #[arg(long)]
+        tmux_target: Option<String>,
+        #[arg(long, default_value_t = 40)]
+        capture_lines: usize,
+        #[arg(long)]
+        smoke: bool,
+        #[arg(long)]
+        smoke_message: Option<String>,
+        #[arg(long)]
+        smoke_expected: Option<String>,
+        #[arg(long)]
+        write_event: bool,
+    },
     ServeConsole {
         #[arg(long, default_value = "127.0.0.1:4317")]
         bind: SocketAddr,
@@ -32,6 +48,37 @@ async fn main() -> Result<()> {
             let pool = ledger::connect(&config).await?;
             let event_id = ledger::write_health_event(&pool).await?;
             println!("ledger health event written: {event_id}");
+        }
+        Command::HermesHealth {
+            ssh_target,
+            tmux_target,
+            capture_lines,
+            smoke,
+            smoke_message,
+            smoke_expected,
+            write_event,
+        } => {
+            let probe_config = hermes::HermesProbeConfig::from_inputs(
+                ssh_target,
+                tmux_target,
+                capture_lines,
+                smoke,
+                smoke_message,
+                smoke_expected,
+            )?;
+            let report = hermes::probe(&probe_config)?;
+
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report.to_redacted_payload())?
+            );
+
+            if write_event {
+                let config = ConductorConfig::from_env()?;
+                let pool = ledger::connect(&config).await?;
+                let event_id = ledger::write_hermes_health_event(&pool, &report).await?;
+                println!("hermes health event written: {event_id}");
+            }
         }
         Command::ServeConsole {
             bind,
